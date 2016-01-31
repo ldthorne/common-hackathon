@@ -77,13 +77,15 @@ function askForAddress(response, convo) {
                 var body = JSON.parse(response.body)
                 var lat = body.results[0].geometry.location.lat;
                 var lng = body.results[0].geometry.location.lng;
-                console.log(lat, lng)
-                
-
                 request('https://api.foursquare.com/v2/venues/explore?client_id=DVFAE2O30O0KVGMSATAJLPLZROXB3XO3SPXX1TJDPSVMQ0SS&client_secret=XNMXF23QENSBIEA1MY1Z5JJ5SFQUFXPU2DWIJVBLC5TA23D3&ll='+lat+','+lng+'&query=brunch&v=20160130', function(error, response, body) {
                     if (!error && response.statusCode == 200) {
                         var parsedBody = JSON.parse(response.body);
-                        console.log(parsedBody.response.groups[0].items)
+                        convo.say("I found these three brunch places near you...");
+                        for(var i=0; i<3;i++){
+                            console.log(parsedBody.response.groups[0].items[i].venue.name)
+                            convo.say(parsedBody.response.groups[0].items[i].venue.name)
+                            convo.next();
+                        }
                     }else{
                         console.error(error)
                     }
