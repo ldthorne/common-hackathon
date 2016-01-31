@@ -8,9 +8,12 @@
     "debug": "2.2.0",
     "eventemitter2": "0.4.14",
     "express": "^4.13.3",
+    "https": "^1.0.0",
     "jfs": "^0.2.6",
     "mustache": "^2.2.1",
-    "request": "^2.67.0",
+    "node-foursquare": "^0.3.0",
+    "nodemon": "^1.8.1",
+    "request": "^2.69.0",
     "ws": "^1.0.0"
   },
   "devDependencies": {
@@ -22,6 +25,7 @@
     "winston": "^2.1.1"
   },
   "scripts": {
+    "start": "nodemon --watch server -e js,html bot.js",
     "pretest": "jscs ./lib/",
     "test": "mocha tests/*.js"
   },

@@ -1,67 +1,6 @@
-/*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-          ______     ______     ______   __  __     __     ______
-          /\  == \   /\  __ \   /\__  _\ /\ \/ /    /\ \   /\__  _\
-          \ \  __<   \ \ \/\ \  \/_/\ \/ \ \  _"-.  \ \ \  \/_/\ \/
-          \ \_____\  \ \_____\    \ \_\  \ \_\ \_\  \ \_\    \ \_\
-           \/_____/   \/_____/     \/_/   \/_/\/_/   \/_/     \/_/
-
-
-This is a sample Slack bot built with Botkit.
-
-This bot demonstrates many of the core features of Botkit:
-
-* Connect to Slack using the real time API
-* Receive messages based on "spoken" patterns
-* Reply to messages
-* Use the conversation system to ask questions
-* Use the built in storage system to store and retrieve information
-  for a user.
-
-# RUN THE BOT:
-
-  Get a Bot token from Slack:
-
-    -> http://my.slack.com/services/new/bot
-
-  Run your bot from the command line:
-
-    token=<MY TOKEN> node bot.js
-
-# USE THE BOT:
-
-  Find your bot inside Slack to send it a direct message.
-
-  Say: "Hello"
-
-  The bot will reply "Hello!"
-
-  Say: "who are you?"
-
-  The bot will tell you its name, where it running, and for how long.
-
-  Say: "Call me <nickname>"
-
-  Tell the bot your nickname. Now you are friends.
-
-  Say: "who am I?"
-
-  The bot will tell you your nickname, if it knows one for you.
-
-  Say: "shutdown"
-
-  The bot will ask if you are sure, and then shut itself down.
-
-  Make sure to invite your bot into other channels using /invite @<my bot>!
-
-# EXTEND THE BOT:
-
-  Botkit is has many features for building cool and useful bots!
-
-  Read all about it here:
-
-    -> http://howdy.ai/botkit
-
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*/
+var Botkit = require('./lib/Botkit.js');
+var https = require('https');
+var request = require('request');
 
 
 if (!process.env.token) {
@@ -69,118 +8,109 @@ if (!process.env.token) {
     process.exit(1);
 }
 
-var Botkit = require('./lib/Botkit.js');
-var os = require('os');
-
 var controller = Botkit.slackbot({
-    debug: true,
+    debug: false
 });
 
-var bot = controller.spawn({
+controller.spawn({
     token: process.env.token
-}).startRTM();
+}).startRTM(function(err) {
+    if (err) {
+        throw new Error(err);
+    }
+});
+
+controller.hears(['brunch', 'brunch, anyone', 'i want brunch'], ['ambient'], function(bot, message) {
+    bot.startConversation(message, askTime);
+});
 
 
-controller.hears(['hello','hi'],'direct_message,direct_mention,mention',function(bot, message) {
-
-    bot.api.reactions.add({
-        timestamp: message.ts,
-        channel: message.channel,
-        name: 'robot_face',
-    },function(err, res) {
-        if (err) {
-            bot.botkit.log('Failed to add emoji reaction :(',err);
-        }
+function askTime(response, convo) {
+    convo.ask("Good morning! What time do you want to schedule brunch?", function(response, convo) {
+        convo.say("Ok.")
+        convo.next();
+        var timeToEat = parseTime(response.text);
+        confirmTime(response, convo, timeToEat);
     });
+}
 
-
-    controller.storage.users.get(message.user,function(err, user) {
-        if (user && user.name) {
-            bot.reply(message,'Hello ' + user.name + '!!');
+function confirmTime(response, convo, timeToEat) {
+    try{
+        timeToEat = timeToEat.toString()
+        }catch(err){
+            console.error(err);
+            askTime(response, convo)
+        }
+    convo.ask("Great. To confirm, you would like to eat at " + timeToEat + "?", function(response, convo) {
+        if (response.text.toLowerCase() === "no") {
+            askTime(response, convo);
+            convo.next()
         } else {
-            bot.reply(message,'Hello.');
+            convo.say("Awesome!")
+            askPlace(response, convo);
+            convo.next()
         }
-    });
-});
+    })
+}
 
-controller.hears(['call me (.*)'],'direct_message,direct_mention,mention',function(bot, message) {
-    var matches = message.text.match(/call me (.*)/i);
-    var name = matches[1];
-    controller.storage.users.get(message.user,function(err, user) {
-        if (!user) {
-            user = {
-                id: message.user,
-            };
-        }
-        user.name = name;
-        controller.storage.users.save(user,function(err, id) {
-            bot.reply(message,'Got it. I will call you ' + user.name + ' from now on.');
-        });
-    });
-});
 
-controller.hears(['what is my name','who am i'],'direct_message,direct_mention,mention',function(bot, message) {
-
-    controller.storage.users.get(message.user,function(err, user) {
-        if (user && user.name) {
-            bot.reply(message,'Your name is ' + user.name);
+function askPlace(response, convo) {
+    convo.ask("Do you know where you'd like to eat (type 'already know'), or do you need some suggestions (type 'need suggestions')?", function(response, convo) {
+        if (response.text.toLowerCase() === 'already know') {
+            console.log("hit if")
+                // askForPlaces(response, convo);
         } else {
-            bot.reply(message,'I don\'t know yet!');
+            console.log("hit else")
+            askForAddress(response, convo);
+            convo.next();
         }
-    });
-});
+    })
+}
 
+function askForAddress(response, convo) {
+    console.log("hit address")
+    convo.ask("What's your address?", function(response, convo) {
+        var address = response.text;
+        address = encodeURI(address);
+        request('https://maps.googleapis.com/maps/api/geocode/json?address='+address+'&key=AIzaSyAO6NjDwwJp_DWMtbEac4_AjJiwHK529L0', function(error, response, body){
+            if (!error && response.statusCode == 200) {
+                var body = JSON.parse(response.body)
+                var lat = body.results[0].geometry.location.lat;
+                var lng = body.results[0].geometry.location.lng;
+                console.log(lat, lng)
+                
 
-controller.hears(['shutdown'],'direct_message,direct_mention,mention',function(bot, message) {
-
-    bot.startConversation(message,function(err, convo) {
-        convo.ask('Are you sure you want me to shutdown?',[
-            {
-                pattern: bot.utterances.yes,
-                callback: function(response, convo) {
-                    convo.say('Bye!');
-                    convo.next();
-                    setTimeout(function() {
-                        process.exit();
-                    },3000);
-                }
-            },
-        {
-            pattern: bot.utterances.no,
-            default: true,
-            callback: function(response, convo) {
-                convo.say('*Phew!*');
-                convo.next();
+                request('https://api.foursquare.com/v2/venues/explore?client_id=DVFAE2O30O0KVGMSATAJLPLZROXB3XO3SPXX1TJDPSVMQ0SS&client_secret=XNMXF23QENSBIEA1MY1Z5JJ5SFQUFXPU2DWIJVBLC5TA23D3&ll='+lat+','+lng+'&query=brunch&v=20160130', function(error, response, body) {
+                    if (!error && response.statusCode == 200) {
+                        var parsedBody = JSON.parse(response.body);
+                        console.log(parsedBody.response.groups[0].items)
+                    }else{
+                        console.error(error)
+                    }
+                })
             }
-        }
-        ]);
-    });
-});
+            
+        })
+
+    })
+}
 
 
-controller.hears(['uptime','identify yourself','who are you','what is your name'],'direct_message,direct_mention,mention',function(bot, message) {
+function parseTime(timeString) {
+    if (timeString == '') return null;
 
-    var hostname = os.hostname();
-    var uptime = formatUptime(process.uptime());
+    var time = timeString.match(/(\d+)(:(\d\d))?\s*(p?)/i);
+    if (time == null) return null;
 
-    bot.reply(message,':robot_face: I am a bot named <@' + bot.identity.name + '>. I have been running for ' + uptime + ' on ' + hostname + '.');
-
-});
-
-function formatUptime(uptime) {
-    var unit = 'second';
-    if (uptime > 60) {
-        uptime = uptime / 60;
-        unit = 'minute';
+    var hours = parseInt(time[1], 10);
+    if (hours == 12 && !time[4]) {
+        hours = 0;
+    } else {
+        hours += (hours < 12 && time[4]) ? 12 : 0;
     }
-    if (uptime > 60) {
-        uptime = uptime / 60;
-        unit = 'hour';
-    }
-    if (uptime != 1) {
-        unit = unit + 's';
-    }
-
-    uptime = uptime + ' ' + unit;
-    return uptime;
+    var d = new Date();
+    d.setHours(hours);
+    d.setMinutes(parseInt(time[3], 10) || 0);
+    d.setSeconds(0, 0);
+    return d;
 }
